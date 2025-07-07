@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -79,30 +80,37 @@ func (m *MovieModel) Get(id int64) (*Movie, error) {
 }
 
 /* Filter parameters as arguments */
-func (m *MovieModel) GetAll(title string, genres []string, f Filters) ([]*Movie, error) {
-	query := `
-		SELECT id, created_at, title, year, runtime, genres, version
+func (m *MovieModel) GetAll(title string, genres []string, f Filters) ([]*Movie, Metadata, error) {
+	/* INFO: count(*) OVER() allows us to get metadata from the query */
+	query := fmt.Sprintf(`
+		SELECT count(*) OVER(), id, created_at, title, year, runtime, genres, version
 		FROM movies
-		WHERE (LOWER(title) = LOWER($1) OR $1 = '')
+		WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
 		AND (genres @> $2 OR $2 = '{}')
-		ORDER BY id`
+		ORDER BY %s %s, id ASC
+		LIMIT $3 OFFSET $4`,
+		f.sortColumn(), f.sortDirection())
 
 	/* Context w/ 3-second timeout */
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	rows, err := m.DB.QueryContext(ctx, query, title, pq.Array(genres))
+	args := []any{title, pq.Array(genres), f.limit(), f.offset()}
+
+	rows, err := m.DB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, Metadata{}, err
 	}
 	defer rows.Close()
 
+	totalRecords := 0
 	movies := []*Movie{}
 
 	for rows.Next() {
 		var movie Movie
 
 		err := rows.Scan(
+			&totalRecords,
 			&movie.ID,
 			&movie.CreatedAt,
 			&movie.Title,
@@ -113,17 +121,19 @@ func (m *MovieModel) GetAll(title string, genres []string, f Filters) ([]*Movie,
 		)
 
 		if err != nil {
-			return nil, err
+			return nil, Metadata{}, err
 		}
 
 		movies = append(movies, &movie)
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, Metadata{}, err
 	}
 
-	return movies, nil
+	metadata := calculateMetadata(totalRecords, f.Page, f.PageSize)
+
+	return movies, metadata, nil
 }
 
 func (m *MovieModel) Update(movie *Movie) error {
