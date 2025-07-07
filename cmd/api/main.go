@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/mohafarman/greenlight/internal/data"
+	"github.com/mohafarman/greenlight/internal/jsonlog"
 )
 
 const version = "1.0.0"
@@ -29,7 +30,7 @@ type config struct {
 
 type application struct {
 	config config
-	logger *log.Logger
+	logger *jsonlog.Logger
 	models data.Models
 }
 
@@ -46,16 +47,16 @@ func main() {
 
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "INFO:\t", log.Ldate|log.Ltime)
+	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
 	db, err := openDB(cfg)
 	if err != nil {
-		logger.Fatal(err)
+		logger.Fatal(err, nil)
 	}
 
 	defer db.Close()
 
-	logger.Printf("database connection pool established")
+	logger.Info("database connection pool established", nil)
 
 	app := &application{
 		config: cfg,
@@ -69,12 +70,17 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
 		Handler:      app.routes(),
+		/* Tell http.Server to communicate logs through our logger which implements io.Writer interface */
+		ErrorLog: log.New(logger, "", 0),
 	}
 
-	logger.Printf("Starting %s server on port :%d", cfg.env, cfg.port)
+	logger.Info("Starting server", map[string]string{
+		"addr": server.Addr,
+		"env":  cfg.env,
+	})
 	err = server.ListenAndServe()
 	if err != nil {
-		logger.Fatal(err)
+		logger.Fatal(err, nil)
 	}
 }
 
