@@ -45,31 +45,35 @@ func (app *application) rateLimiter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Any code here will run for every request that the middleware handles.
 
-		ip, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			app.serverErrorResponse(w, r, err)
-			return
-		}
-
-		mu.Lock()
-
-		// If no rate limiter (client) exists for the current user, create one
-		if _, found := clients[ip]; !found {
-			clients[ip] = &client{
-				limiter: rate.NewLimiter(2, 4),
+		if app.config.limiter.enabled {
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				app.serverErrorResponse(w, r, err)
+				return
 			}
-		}
-		clients[ip].lastSeen = time.Now()
 
-		if !clients[ip].limiter.Allow() {
+			// INFO: Because each request spins up its own goroutine we need to lock
+			// before writing to the map
+			mu.Lock()
+
+			// If no rate limiter (client) exists for the current user, create one
+			if _, found := clients[ip]; !found {
+				clients[ip] = &client{
+					limiter: rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst),
+				}
+			}
+			clients[ip].lastSeen = time.Now()
+
+			if !clients[ip].limiter.Allow() {
+				mu.Unlock()
+				app.rateLimitExceededResponse(w, r)
+				return
+			}
+			// DON'T use defer to unlock the mutex, as that would mean
+			// that the mutex isn't unlocked until all the handlers downstream of this
+			// middleware have also returned.
 			mu.Unlock()
-			app.rateLimitExceededResponse(w, r)
-			return
 		}
-		// DON'T use defer to unlock the mutex, as that would mean
-		// that the mutex isn't unlocked until all the handlers downstream of this
-		// middleware have also returned.
-		mu.Unlock()
 		next.ServeHTTP(w, r)
 	})
 }
