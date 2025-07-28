@@ -20,6 +20,8 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPatch, "/v1/movies/:id", app.updateMovieHandler)
 	router.HandlerFunc(http.MethodDelete, "/v1/movies/:id", app.deleteMovieHandler)
 
+	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
+
 	/* After recoverPanic so any panic in rateLimiter can be handled */
 	/* Right after recoverPanic so our server don't have to do unnecessary work */
 	return app.recoverPanic(app.rateLimiter(router))
