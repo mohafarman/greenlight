@@ -44,9 +44,18 @@ func (app *application) serve() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
-		// Shutdown() returns nil if successful, otherwise if after timeout it will return
-		// an error
-		shutdownError <- server.Shutdown(ctx)
+		err := server.Shutdown(ctx)
+		if err != nil {
+			// Only send on the shutdownError channel if there's an error
+			shutdownError <- err
+		}
+
+		app.logger.Info("completing background tasks", map[string]string{
+			"addr": server.Addr,
+		})
+
+		app.wg.Wait()
+		shutdownError <- nil
 	}()
 
 	app.logger.Info("Starting server", map[string]string{
