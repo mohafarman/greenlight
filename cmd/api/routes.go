@@ -23,6 +23,8 @@ func (app *application) routes() http.Handler {
 	router.HandlerFunc(http.MethodPost, "/v1/users", app.registerUserHandler)
 	router.HandlerFunc(http.MethodPut, "/v1/users/activated", app.activateUserHandler)
 
+	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", app.createAuthenticationTokenHandler)
+
 	/* After recoverPanic so any panic in rateLimiter can be handled */
 	/* Right after recoverPanic so our server don't have to do unnecessary work */
 	return app.recoverPanic(app.rateLimiter(router))
