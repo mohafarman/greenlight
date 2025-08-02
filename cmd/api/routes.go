@@ -27,5 +27,5 @@ func (app *application) routes() http.Handler {
 
 	/* After recoverPanic so any panic in rateLimiter can be handled */
 	/* Right after recoverPanic so our server don't have to do unnecessary work */
-	return app.recoverPanic(app.rateLimiter(router))
+	return app.recoverPanic(app.rateLimiter(app.authenticate(router)))
 }

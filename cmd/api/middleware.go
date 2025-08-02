@@ -1,12 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/mohafarman/greenlight/internal/data"
+	"github.com/mohafarman/greenlight/internal/validator"
 	"golang.org/x/time/rate"
 )
 
@@ -91,6 +95,56 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 				app.serverErrorResponse(w, r, fmt.Errorf("%s", err))
 			}
 		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		/* Tells the caches that this kv pair may vary */
+		w.Header().Add("Vary", "Authorization")
+
+		/* empty == "" */
+		authorizationHeader := r.Header.Get("Authorization")
+
+		/* Set anonymous user if header is empty */
+		if authorizationHeader == "" {
+			r = app.contextSetUser(r, data.AnonymousUser)
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		/* Expected format: "Bearer <token>" */
+		headerParts := strings.Split(authorizationHeader, " ")
+		if len(headerParts) != 2 && headerParts[0] != "Bearer" {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		token := headerParts[1]
+
+		app.logger.Info(fmt.Sprintf("token: %s", headerParts[1]), nil)
+
+		v := validator.New()
+
+		if data.ValidateTokenPlaintext(v, token); !v.Valid() {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		user, err := app.models.Users.GetForToken(data.ScopeAuthentication, token)
+		if err != nil {
+			switch {
+			case errors.Is(err, data.ErrRecordNotFound):
+				app.invalidAuthenticationTokenResponse(w, r)
+			default:
+				app.serverErrorResponse(w, r, err)
+			}
+			return
+		}
+
+		r = app.contextSetUser(r, user)
+
 		next.ServeHTTP(w, r)
 	})
 }

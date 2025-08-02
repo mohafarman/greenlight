@@ -13,6 +13,8 @@ import (
 
 var (
 	ErrDuplicateEmail = errors.New("duplicate email")
+
+	AnonymousUser = &User{}
 )
 
 // "-" prevents output to JSON when converting
@@ -86,6 +88,10 @@ func ValidateUser(v *validator.Validator, user *User) {
 		/* Logical error in our codebase */
 		panic("missing password hash for user")
 	}
+}
+
+func (u *User) IsAnonymous() bool {
+	return u == AnonymousUser
 }
 
 func (m UserModel) Insert(user *User) error {
