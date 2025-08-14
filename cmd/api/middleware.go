@@ -123,8 +123,6 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 		token := headerParts[1]
 
-		app.logger.Info(fmt.Sprintf("token: %s", headerParts[1]), nil)
-
 		v := validator.New()
 
 		if data.ValidateTokenPlaintext(v, token); !v.Valid() {
@@ -147,4 +145,65 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.contextGetUser(r)
+
+		/* If user is anonymous */
+		if user.IsAnonymous() {
+			app.authenticationRequiredResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+/* Checks that a user is both authenticated and activated */
+func (app *application) requireActivatedUser(next http.HandlerFunc) http.HandlerFunc {
+	/* store the function in fn, don't return */
+	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.contextGetUser(r)
+
+		/* If user is not activated */
+		if !user.Activated {
+			app.inactiveAccountResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+
+	/* wrap fn with requireAuthenticatedUser middleware before returning */
+	/* requireAuthenticatedUser() will be executed first before this middleware executes itself */
+	return app.requireAuthenticatedUser(fn)
+}
+
+func (app *application) requirePermission(code string, next http.HandlerFunc) http.HandlerFunc {
+	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.contextGetUser(r)
+
+		/* Get slices of permissions */
+		permissions, err := app.models.Permissions.GetAllForUser(int64(user.ID))
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		/* Check if slice includes (contains) required permissions, otherwise */
+		/* return a 403 forbidden response */
+		if !permissions.Include(code) {
+			app.notPermittedResponse(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+
+	/* requireActivatedUser() will be executed first before this middleware executes itself */
+	/* thus when we call requirePermission() we will be carrying out three checks: */
+	/* authenticed (non-anonymous) -> activated user -> specific permission */
+	return app.requireActivatedUser(fn)
 }

@@ -57,7 +57,6 @@ func (m *MovieModel) Get(id int64) (*Movie, error) {
 	defer cancel()
 
 	err := m.DB.QueryRowContext(ctx, query, id).Scan(
-		&[]byte{},
 		&movie.ID,
 		&movie.CreatedAt,
 		&movie.Title,

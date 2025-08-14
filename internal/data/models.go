@@ -13,9 +13,10 @@ var (
 // Models struct to wrap all other models.
 // A single "container" which will hold all database models
 type Models struct {
-	Movies MovieModel
-	Users  UserModel
-	Tokens TokenModel
+	Movies      MovieModel
+	Users       UserModel
+	Tokens      TokenModel
+	Permissions PermissionsModel
 }
 
 func NewModels(db *sql.DB) Models {
@@ -27,6 +28,9 @@ func NewModels(db *sql.DB) Models {
 			DB: db,
 		},
 		Tokens: TokenModel{
+			DB: db,
+		},
+		Permissions: PermissionsModel{
 			DB: db,
 		},
 	}
