@@ -53,6 +53,13 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	/* Give movies:read permission to new user */
+	err = app.models.Permissions.AddForUser(int64(user.ID), "movies:read")
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
 	/* After record has been inserted in db create an activation code */
 	token, err := app.models.Tokens.New(int64(user.ID), 3*24*time.Hour, data.ScopeActivation)
 	if err != nil {
