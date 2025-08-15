@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -206,4 +207,42 @@ func (app *application) requirePermission(code string, next http.HandlerFunc) ht
 	/* thus when we call requirePermission() we will be carrying out three checks: */
 	/* authenticed (non-anonymous) -> activated user -> specific permission */
 	return app.requireActivatedUser(fn)
+}
+
+func (app *application) enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		/* must be added if what we return depends on a header */
+		/* otherwise might be cause of subtle bugs */
+		w.Header().Add("Vary", "Origin")
+		w.Header().Add("Vary", "Access-Control-Request-Method")
+
+		origin := r.Header.Get("Origin")
+
+		app.logger.Info(fmt.Sprintf("trusted: %s", app.config.cors.trustedOrigins), nil)
+		app.logger.Info(fmt.Sprintf("origin: %s", origin), nil)
+
+		/* only run if there's an Origin request header */
+		if origin != "" {
+			/* checks to see if the trusted origins contains origin, only then */
+			/* allow CORS */
+			if slices.Contains(app.config.cors.trustedOrigins, origin) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+
+				/* Check if it's a preflight CORS request */
+				if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+					/* Set necessary preflight response headers */
+					w.Header().Set("Access-Control-Allow-Method", "OPTIONS, PUT, PATCH, DELETE")
+					w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+
+					/* Write the headers with a 200 OK status */
+					/* Instead of 204 No Content because we actualy don't have a body */
+					/* because som browsers don't support the 204 No Conent and may still block */
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
