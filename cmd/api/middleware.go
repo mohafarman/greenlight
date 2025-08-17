@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -218,9 +220,6 @@ func (app *application) enableCORS(next http.Handler) http.Handler {
 
 		origin := r.Header.Get("Origin")
 
-		app.logger.Info(fmt.Sprintf("trusted: %s", app.config.cors.trustedOrigins), nil)
-		app.logger.Info(fmt.Sprintf("origin: %s", origin), nil)
-
 		/* only run if there's an Origin request header */
 		if origin != "" {
 			/* checks to see if the trusted origins contains origin, only then */
@@ -244,5 +243,68 @@ func (app *application) enableCORS(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+/* Embeds http.ResponseWriter so we can record the http status codes */
+/* that are sent to the client. We record the status code and a bool to indicate */
+/* wether we have stored it or not */
+type metricsResponseWriter struct {
+	http.ResponseWriter
+	statusCode    int
+	headerWritten bool
+}
+
+func (mw *metricsResponseWriter) WriteHeader(statusCode int) {
+	/* Pass through WriteHeader first before recording the status code */
+	/* because WriteHeader might panic if incorrect status code is sent */
+	mw.ResponseWriter.WriteHeader(statusCode)
+
+	if !mw.headerWritten {
+		mw.statusCode = statusCode
+		mw.headerWritten = true
+	}
+}
+
+func (mw *metricsResponseWriter) Write(b []byte) (int, error) {
+	if !mw.headerWritten {
+		mw.statusCode = http.StatusOK
+		mw.headerWritten = true
+	}
+
+	return mw.ResponseWriter.Write(b)
+}
+
+func (mw *metricsResponseWriter) Unwrap() http.ResponseWriter {
+	return mw.ResponseWriter
+}
+
+func (app *application) metrics(next http.Handler) http.Handler {
+	var (
+		totalRequestsReceived           = expvar.NewInt("total_requests_received")
+		totalResponsesSent              = expvar.NewInt("total_responses_sent")
+		totalProcessingTimeMicroseconds = expvar.NewInt("total_processing_µs")
+		totalResponsesSentByStatus      = expvar.NewMap("total_responses_sent_by_status")
+	)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		totalRequestsReceived.Add(1)
+
+		mw := &metricsResponseWriter{ResponseWriter: w}
+
+		next.ServeHTTP(mw, r)
+
+		// On the way back up the middleware chain, increment the number of responses
+		// sent by 1.
+		totalResponsesSent.Add(1)
+
+		// Now the status code should be stored in mw.statusCode. expvar map is string-keyed
+		// so we need to change the code into a string
+		totalResponsesSentByStatus.Add(strconv.Itoa(mw.statusCode), 1)
+
+		dur := time.Since(start).Milliseconds()
+		totalProcessingTimeMicroseconds.Add(dur)
 	})
 }

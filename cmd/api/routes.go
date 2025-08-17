@@ -1,6 +1,7 @@
 package main
 
 import (
+	"expvar"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -25,7 +26,9 @@ func (app *application) routes() http.Handler {
 
 	router.HandlerFunc(http.MethodPost, "/v1/tokens/authentication", app.createAuthenticationTokenHandler)
 
+	router.Handler(http.MethodGet, "/debug/vars", expvar.Handler())
+
 	/* After recoverPanic so any panic in rateLimiter can be handled */
 	/* Right after recoverPanic so our server don't have to do unnecessary work */
-	return app.recoverPanic(app.enableCORS(app.rateLimiter(app.authenticate(router))))
+	return app.metrics(app.recoverPanic(app.enableCORS(app.rateLimiter(app.authenticate(router)))))
 }
