@@ -13,10 +13,7 @@ import (
 type Permissions []string
 
 func (p Permissions) Include(code string) bool {
-	if slices.Contains(p, code) {
-		return true
-	}
-	return false
+	return slices.Contains(p, code)
 }
 
 type PermissionsModel struct {
