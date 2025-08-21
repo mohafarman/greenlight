@@ -7,7 +7,7 @@
 include .envrc
 .DEFAULT_GOAL := build
 
-.PHONY:vet build run help confirm clean db/psql db/migrations/new db/migrations/up audit
+.PHONY:vet build run help confirm clean db/psql db/migrations/new db/migrations/up audit vendor
 
 # ==================================================================================== #
 # HELPERS
@@ -54,10 +54,8 @@ db/migrations/up: confirm
 # QUALITY CONTROL
 # ==================================================================================== #
 
+## audit: tidy and vendor dependencies and format, vet and test all code
 audit:
-	@echo 'Tidying and verifying module dependencies...'
-	go mod tidy
-	go mod verify
 	@echo 'Formatting code...'
 	go fmt ./...
 	@echo 'Vetting code...'
@@ -65,5 +63,13 @@ audit:
 	staticcheck ./...
 	@echo 'Running tests...'
 	go test -race -vet=off ./...
+
+## vendor: tidy and vendor dependencies
+vendor:
+	@echo 'Tidying and verifying module dependencies...'
+	go mod tidy
+	go mod verify
+	@echo 'Vendoring dependencies...'
+	go mod vendor
 
 # end

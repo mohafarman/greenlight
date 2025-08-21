@@ -4,7 +4,6 @@ import (
 	"errors"
 	"expvar"
 	"fmt"
-	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/mohafarman/greenlight/internal/data"
 	"github.com/mohafarman/greenlight/internal/validator"
+	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
 
@@ -53,11 +53,13 @@ func (app *application) rateLimiter(next http.Handler) http.Handler {
 		// Any code here will run for every request that the middleware handles.
 
 		if app.config.limiter.enabled {
-			ip, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				app.serverErrorResponse(w, r, err)
-				return
-			}
+			// ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			// if err != nil {
+			// 	app.serverErrorResponse(w, r, err)
+			// 	return
+			// }
+
+			ip := realip.FromRequest(r)
 
 			// INFO: Because each request spins up its own goroutine we need to lock
 			// before writing to the map
