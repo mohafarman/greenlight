@@ -1,0 +1,8 @@
+{
+    email mohamadfarman977@gmail.com
+}
+
+207.154.203.121 {
+    respond /debug/* "Not Permitted" 403
+    reverse_proxy localhost:4000
+}
