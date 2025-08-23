@@ -26,9 +26,6 @@ confirm:
 vet:
 	go vet ./...
 
-build: vet
-	go build ./cmd/api/
-
 ## run: run the cmd/api application
 run: vet
 	@go build ./cmd/api/ && ./api -db-dsn=${GREENLIGHT_DB_DSN}
@@ -71,5 +68,16 @@ vendor:
 	go mod verify
 	@echo 'Vendoring dependencies...'
 	go mod vendor
+
+# ==================================================================================== #
+# BUILD
+# ==================================================================================== #
+
+## build/api: build the cmd/api application
+build:
+	@echo 'Building cmd/api...'
+	# -s flag removes debugging information form binary
+	go build -ldflags='-s' -o=./bin/api ./cmd/api
+	GOOS=linux GOARCH=amd64 go build -ldflags='-s' -o=./bin/linux_amd64/api ./cmd/api
 
 # end
